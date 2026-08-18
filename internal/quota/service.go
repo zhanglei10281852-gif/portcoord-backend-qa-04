@@ -136,11 +136,8 @@ func (s *Service) reserveWithRetry(ctx context.Context, qt domain.QuotaType, dat
 			}
 			return false, q.ID, err
 		}
-		if affected >= 0 {
+		if affected > 0 {
 			return true, q.ID, nil
-		}
-		if ctx.Err() != nil {
-			return false, q.ID, ctx.Err()
 		}
 	}
 	return false, "", apperr.Conflict("quota", string(qt), 0)

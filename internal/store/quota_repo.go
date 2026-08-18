@@ -110,12 +110,9 @@ func (s *SQLiteStore) ListQuotas(ctx context.Context, q domain.PageQuery) (domai
 
 func (s *SQLiteStore) ReserveQuota(ctx context.Context, id string, amount, version int) (int, error) {
 	ex := s.executor(ctx)
-	current, readErr := s.GetQuota(ctx, id)
-	if readErr != nil {
-		return 0, readErr
-	}
-	res, err := ex.Exec(`UPDATE quotas SET reserved_amount = ?, version = version + 1, updated_at = ?
-		WHERE id = ?`, current.ReservedAmount+amount, nowStamp(), id)
+	res, err := ex.Exec(`UPDATE quotas SET reserved_amount = reserved_amount + ?, version = version + 1, updated_at = ?
+		WHERE id = ? AND version = ? AND daily_limit - used_amount - reserved_amount >= ?`,
+		amount, nowStamp(), id, version, amount)
 	if err != nil {
 		return 0, fmt.Errorf("reserve quota: %w", err)
 	}
