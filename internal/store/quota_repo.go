@@ -110,12 +110,14 @@ func (s *SQLiteStore) ListQuotas(ctx context.Context, q domain.PageQuery) (domai
 
 func (s *SQLiteStore) ReserveQuota(ctx context.Context, id string, amount, version int) (int, error) {
 	ex := s.executor(ctx)
-	current, readErr := s.GetQuota(ctx, id)
-	if readErr != nil {
-		return 0, readErr
-	}
-	res, err := ex.Exec(`UPDATE quotas SET reserved_amount = ?, version = version + 1, updated_at = ?
-		WHERE id = ?`, current.ReservedAmount+amount, nowStamp(), id)
+	// Atomically reserve only when the version is still current and there is
+	// enough remaining capacity. The version guard prevents lost updates under
+	// concurrency; the capacity guard ensures reserved+used never exceeds the
+	// daily limit. affected==0 means a stale version or insufficient capacity,
+	// which the caller must treat as a conflict and retry (or reject).
+	res, err := ex.Exec(`UPDATE quotas SET reserved_amount = reserved_amount + ?, version = version + 1, updated_at = ?
+		WHERE id = ? AND version = ? AND used_amount + reserved_amount + ? <= daily_limit`,
+		amount, nowStamp(), id, version, amount)
 	if err != nil {
 		return 0, fmt.Errorf("reserve quota: %w", err)
 	}

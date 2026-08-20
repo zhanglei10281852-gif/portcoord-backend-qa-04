@@ -136,9 +136,12 @@ func (s *Service) reserveWithRetry(ctx context.Context, qt domain.QuotaType, dat
 			}
 			return false, q.ID, err
 		}
-		if affected >= 0 {
+		if affected > 0 {
 			return true, q.ID, nil
 		}
+		// affected == 0: stale version or insufficient capacity at write time.
+		// Loop to re-read and retry (the availability check above will reject
+		// the request once the quota is genuinely exhausted).
 		if ctx.Err() != nil {
 			return false, q.ID, ctx.Err()
 		}
